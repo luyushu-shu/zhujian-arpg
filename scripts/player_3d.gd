@@ -1,12 +1,15 @@
-extends CharacterBody2D
+extends CharacterBody3D
+
+const BloodFx := preload("res://scripts/blood_spray_3d.gd")
 
 signal hp_changed(current: int, maximum: int)
 signal parry_flash(text: String)
 
-const WALK_SPEED := 180.0
-const RUN_SPEED := 320.0
-const CROUCH_SPEED := 70.0
-const JUMP_VELOCITY := -520.0
+const WALK_SPEED := 4.2
+const RUN_SPEED := 7.4
+const CROUCH_SPEED := 1.8
+const JUMP_VELOCITY := 7.1
+const GRAVITY := 22.0
 const COYOTE := 0.10
 const JUMP_BUFFER := 0.12
 const ATTACK_LOCK := 0.32
@@ -16,16 +19,16 @@ const PARRY_COOLDOWN := 0.45
 const BLOCK_DAMAGE := 0.35
 const SHIFT_TAP := 0.16
 const DODGE_TIME := 0.30
-const DODGE_SPEED := 460.0
+const DODGE_SPEED := 10.5
 const DODGE_CD := 0.42
 const HURT_TIME := 0.38
 const SLIDE_TIME := 0.38
-const SLIDE_SPEED := 430.0
+const SLIDE_SPEED := 9.8
 const SLIDE_CD := 0.55
 const LAND_TIME := 0.16
 const AIR_LOCK := 0.30
 const PLUNGE_LOCK := 0.22
-const PLUNGE_FALL := 780.0
+const PLUNGE_FALL := -18.0
 const HEAVY_LOCK := 0.55
 const KICK_LOCK := 0.28
 const COUNTER_LOCK := 0.34
@@ -65,9 +68,9 @@ var charge_t := 0.0
 var counter_left := 0.0
 var plunge_falling := false
 
-@onready var model: Node2D = $Model
-@onready var hitbox: Area2D = $Hitbox
-@onready var hit_shape: CollisionShape2D = $Hitbox/CollisionShape2D
+@onready var model: Node3D = $Model
+@onready var hitbox: Area3D = $Hitbox
+@onready var hit_shape: CollisionShape3D = $Hitbox/CollisionShape3D
 
 
 func _ready() -> void:
@@ -75,21 +78,48 @@ func _ready() -> void:
 	hp_changed.emit(hp, max_hp)
 	hit_shape.disabled = true
 	hitbox.body_entered.connect(_on_hitbox_body_entered)
+	floor_snap_length = 0.12
+	_bind_keys()
+	set_process_input(true)
 
 
-func _unhandled_input(event: InputEvent) -> void:
+func _bind_keys() -> void:
+	_add_key("move_left", KEY_A)
+	_add_key("move_left", KEY_LEFT)
+	_add_key("move_right", KEY_D)
+	_add_key("move_right", KEY_RIGHT)
+	_add_key("jump", KEY_SPACE)
+	_add_key("kick", KEY_E)
+	_add_key("heavy", KEY_F)
+	_add_key("crouch", KEY_S)
+	_add_key("sprint", KEY_SHIFT)
+
+
+func _add_key(action: String, physical: Key) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	for existing in InputMap.action_get_events(action):
+		if existing is InputEventKey and (existing as InputEventKey).physical_keycode == physical:
+			return
+	var ev := InputEventKey.new()
+	ev.physical_keycode = physical
+	InputMap.action_add_event(action, ev)
+
+
+func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.physical_keycode == KEY_SPACE:
+		if event.is_action_pressed("jump") or event.physical_keycode == KEY_SPACE:
 			jump_buffer = JUMP_BUFFER
-		elif event.physical_keycode == KEY_E:
+		elif event.is_action_pressed("kick") or event.physical_keycode == KEY_E:
 			_try_kick()
-		elif event.physical_keycode == KEY_F:
+		elif event.is_action_pressed("heavy") or event.physical_keycode == KEY_F:
 			if hurt_lock <= 0.0 and dodge_left <= 0.0 and attack_lock <= 0.0:
 				charging = true
 				charge_t = 0.0
 	if event is InputEventKey and not event.pressed:
-		if event.physical_keycode == KEY_F and charging:
-			_release_charge()
+		if event.physical_keycode == KEY_F or event.is_action_released("heavy"):
+			if charging:
+				_release_charge()
 	if hurt_lock > 0.0:
 		return
 	if event is InputEventMouseButton and event.pressed:
@@ -106,7 +136,7 @@ func _physics_process(delta: float) -> void:
 
 	var on_floor_now := is_on_floor()
 	if not on_floor_now:
-		velocity.y += float(ProjectSettings.get_setting("physics/2d/default_gravity")) * delta
+		velocity.y -= GRAVITY * delta
 		coyote_left = maxf(coyote_left - delta, 0.0)
 		was_air = true
 	else:
@@ -120,22 +150,17 @@ func _physics_process(delta: float) -> void:
 			parry_flash.emit("坠击")
 		was_air = false
 
-	var hold_s := Input.is_physical_key_pressed(KEY_S)
+	var hold_s := Input.is_action_pressed("crouch") or Input.is_physical_key_pressed(KEY_S)
 	crouching = on_floor_now and hold_s and not running and not _busy() and slide_left <= 0.0 and not charging
 	if running and hold_s and on_floor_now:
 		_try_slide()
 
 	var busy := _busy()
 	var dir := 0
-	if not busy and not blocking and not crouching and not charging:
-		if Input.is_physical_key_pressed(KEY_A):
+	if not busy and not blocking and not charging:
+		if Input.is_action_pressed("move_left") or Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT):
 			dir -= 1
-		if Input.is_physical_key_pressed(KEY_D):
-			dir += 1
-	elif crouching and not busy:
-		if Input.is_physical_key_pressed(KEY_A):
-			dir -= 1
-		if Input.is_physical_key_pressed(KEY_D):
+		if Input.is_action_pressed("move_right") or Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT):
 			dir += 1
 	if dir != 0:
 		facing = dir
@@ -143,22 +168,23 @@ func _physics_process(delta: float) -> void:
 	_apply_facing()
 
 	if dodge_left > 0.0:
-		velocity.x = facing * DODGE_SPEED
+		velocity.x = float(facing) * DODGE_SPEED
 	elif slide_left > 0.0:
-		velocity.x = facing * SLIDE_SPEED
+		velocity.x = float(facing) * SLIDE_SPEED
 	elif plunge_falling:
-		velocity.x = facing * 40.0
+		velocity.x = float(facing) * 0.9
 		velocity.y = PLUNGE_FALL
 	elif charging:
 		velocity.x = move_toward(velocity.x, 0.0, WALK_SPEED * 10.0 * delta)
 	elif not busy and not blocking:
 		var spd := CROUCH_SPEED if crouching else (RUN_SPEED if running else WALK_SPEED)
-		velocity.x = dir * spd
+		velocity.x = float(dir) * spd
 	elif parry_left > 0.0 or blocking:
 		velocity.x = move_toward(velocity.x, 0.0, WALK_SPEED * 8.0 * delta)
 	elif attack_lock > 0.0:
 		_attack_move(delta)
 
+	velocity.z = 0.0
 	if jump_buffer > 0.0 and coyote_left > 0.0 and not busy and not blocking and not charging:
 		velocity.y = JUMP_VELOCITY
 		jump_buffer = 0.0
@@ -169,6 +195,7 @@ func _physics_process(delta: float) -> void:
 	blocking = Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) and not busy and not charging
 	_update_pose(delta, dir)
 	move_and_slide()
+	global_position.z = 0.0
 
 
 func _busy() -> bool:
@@ -177,20 +204,20 @@ func _busy() -> bool:
 
 func _attack_move(delta: float) -> void:
 	if attack_style == "heavy" or attack_style == "counter":
-		velocity.x = facing * 180.0 * (attack_lock / maxf(attack_lock_max, 0.01))
+		velocity.x = float(facing) * 4.2 * (attack_lock / maxf(attack_lock_max, 0.01))
 	elif attack_style == "kick":
-		velocity.x = facing * 90.0
+		velocity.x = float(facing) * 2.2
 	elif attack_style == "air":
-		velocity.x = move_toward(velocity.x, facing * 80.0, 400.0 * delta)
+		velocity.x = move_toward(velocity.x, float(facing) * 1.8, 10.0 * delta)
 		velocity.y *= 0.92
 	elif attack_style == "thrust":
-		velocity.x = facing * 140.0
+		velocity.x = float(facing) * 3.4
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, WALK_SPEED * 3.0 * delta)
 
 
 func _update_shift(delta: float) -> void:
-	var down := Input.is_physical_key_pressed(KEY_SHIFT)
+	var down := Input.is_action_pressed("sprint") or Input.is_physical_key_pressed(KEY_SHIFT)
 	if down:
 		shift_held += delta
 		if shift_held >= SHIFT_TAP and dodge_left <= 0.0 and hurt_lock <= 0.0:
@@ -275,25 +302,24 @@ func _tick_timers(delta: float) -> void:
 
 
 func _apply_facing() -> void:
-	var sx := 1.0 if facing >= 0 else -1.0
-	model.scale = Vector2(sx, 1.0)
-	var hx := 36.0
-	var hy := -24.0
+	if model.has_method("set_facing"):
+		model.set_facing(facing)
+	var hx := 0.85
+	var hy := 0.95
 	if attack_style == "kick":
-		hx = 24.0
-		hy = -10.0
+		hx = 0.7
+		hy = 0.45
 	elif attack_style == "plunge":
-		hx = 8.0
-		hy = -6.0
+		hx = 0.2
+		hy = 0.35
 	elif attack_style == "heavy" or attack_style == "counter":
-		hx = 46.0
+		hx = 1.15
 	elif attack_style == "air":
-		hy = -30.0
+		hy = 1.15
 	elif attack_style == "slide":
-		hx = 28.0
-		hy = -12.0
-	hitbox.position = Vector2(hx * sx, hy)
-	hitbox.scale.x = 1.0
+		hx = 0.75
+		hy = 0.35
+	hitbox.position = Vector3(hx * float(facing), hy, 0.0)
 
 
 func _try_attack() -> void:
@@ -386,7 +412,7 @@ func receive_hit(amount: int, from_x: float, parriable := true) -> String:
 		return "ignored"
 	if parriable and is_parrying():
 		parry_flash.emit("弹刀！")
-		CombatText.popup(get_parent(), global_position + Vector2(0, -52), "弹", "parry")
+		CombatText.popup3d(get_parent(), global_position + Vector3(0, 1.7, 0.2), "弹", "parry")
 		invuln = 0.15
 		counter_left = COUNTER_WINDOW
 		return "parried"
@@ -399,9 +425,9 @@ func receive_hit(amount: int, from_x: float, parriable := true) -> String:
 		parry_flash.emit("格挡")
 	hp = maxi(hp - dmg, 0)
 	hp_changed.emit(hp, max_hp)
-	CombatText.popup(
+	CombatText.popup3d(
 		get_parent(),
-		global_position + Vector2(0, -50),
+		global_position + Vector3(0, 1.65, 0.2),
 		str(dmg),
 		"block" if blocked else "hurt"
 	)
@@ -411,16 +437,12 @@ func receive_hit(amount: int, from_x: float, parriable := true) -> String:
 	var side := signf(global_position.x - from_x)
 	if side == 0.0:
 		side = -float(facing)
-	velocity = Vector2(side * 200.0, -110.0)
+	velocity = Vector3(side * 4.6, 2.4, 0.0)
 	if not blocked:
-		_blood(Vector2(side, 0.0))
+		BloodFx.spawn(get_parent(), global_position + Vector3(0, 1.1, 0), Vector3(side, 0.2, 0.15))
 	if hp <= 0:
 		_die()
 	return "blocked" if blocked else "hurt"
-
-
-func _blood(away: Vector2) -> void:
-	BloodSpray.spawn(get_parent(), global_position + Vector2(0, -28), away)
 
 
 func _die() -> void:
@@ -430,7 +452,7 @@ func _die() -> void:
 	get_tree().reload_current_scene()
 
 
-func _on_hitbox_body_entered(body_node: Node2D) -> void:
+func _on_hitbox_body_entered(body_node: Node3D) -> void:
 	if body_node == self:
 		return
 	if not body_node.has_method("receive_hit"):
@@ -491,7 +513,7 @@ func _update_pose(delta: float, dir: int) -> void:
 		model.play_land(1.0 - land_left / LAND_TIME)
 		return
 	if not is_on_floor():
-		if velocity.y < 0.0:
+		if velocity.y > 0.0:
 			model.play_jump()
 		else:
 			model.play_fall()

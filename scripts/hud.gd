@@ -28,6 +28,8 @@ var _low_hp := false
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	focus_mode = Control.FOCUS_NONE
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_theme_constant_override("margin_left", 64)
 	add_theme_constant_override("margin_top", 40)
 	add_theme_constant_override("margin_right", 64)
@@ -57,7 +59,7 @@ func _process(_delta: float) -> void:
 	_update_charge()
 
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_TAB:
 			_toggle_help()

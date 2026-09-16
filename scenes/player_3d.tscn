@@ -1,0 +1,39 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/player_3d.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/character_rig_3d.gd" id="2_model"]
+
+[sub_resource type="CapsuleShape3D" id="CapBody"]
+radius = 0.28
+height = 1.62
+
+[sub_resource type="BoxShape3D" id="BoxHit"]
+size = Vector3(0.9, 0.7, 0.7)
+
+[node name="Player" type="CharacterBody3D" groups=["player"]]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.82, 0)
+shape = SubResource("CapBody")
+
+[node name="Model" type="Node3D" parent="."]
+script = ExtResource("2_model")
+kind = "hero"
+
+[node name="Hitbox" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.85, 0.95, 0)
+collision_layer = 0
+collision_mask = 4
+monitorable = false
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Hitbox"]
+shape = SubResource("BoxHit")
+disabled = true
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.985, 0.174, 0, -0.174, 0.985, 0, 1.45, 7.4)
+fov = 42.0
+current = true

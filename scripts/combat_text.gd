@@ -64,3 +64,40 @@ func _style_label() -> void:
 			_label.text = _body
 			_label.add_theme_font_size_override("font_size", 22)
 			_label.add_theme_color_override("font_color", Color(0.96, 0.94, 0.92, 1))
+
+
+static func popup3d(into: Node, at: Vector3, body: String, kind: String) -> void:
+	if into == null or not is_instance_valid(into):
+		return
+	if _alive >= MAX_ALIVE:
+		return
+	_alive += 1
+	var n := Label3D.new()
+	n.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	n.no_depth_test = true
+	n.pixel_size = 0.012
+	n.outline_render_priority = 1
+	n.outline_size = 12
+	n.modulate = Color(0.96, 0.94, 0.92, 1)
+	n.outline_modulate = Color(0.02, 0.02, 0.03, 0.9)
+	n.font_size = 64
+	match kind:
+		"block":
+			n.text = "挡 %s" % body
+			n.font_size = 48
+			n.modulate = Color(0.72, 0.74, 0.78, 1)
+		"parry":
+			n.text = body
+			n.modulate = Color(0.92, 0.9, 0.78, 1)
+		_:
+			n.text = body
+	n.global_position = at + Vector3(randf_range(-0.12, 0.12), randf_range(0.0, 0.08), 0.15)
+	into.add_child(n)
+	var tw := n.create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(n, "position:y", n.position.y + 0.55, 0.42).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(n, "modulate:a", 0.0, 0.28).set_delay(0.18)
+	tw.chain().tween_callback(func () -> void:
+		_alive = maxi(_alive - 1, 0)
+		n.queue_free()
+	)
