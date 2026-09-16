@@ -1,0 +1,42 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/character_model.gd" id="2_model"]
+
+[sub_resource type="RectangleShape2D" id="RectBody"]
+size = Vector2(22, 42)
+
+[sub_resource type="RectangleShape2D" id="RectHit"]
+size = Vector2(40, 28)
+
+[node name="Player" type="CharacterBody2D" groups=["player"]]
+collision_layer = 2
+collision_mask = 1
+script = ExtResource("1_player")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, -21)
+shape = SubResource("RectBody")
+
+[node name="Model" type="Node2D" parent="."]
+script = ExtResource("2_model")
+kind = "hero"
+
+[node name="Hitbox" type="Area2D" parent="."]
+position = Vector2(32, -24)
+collision_layer = 0
+collision_mask = 4
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox"]
+shape = SubResource("RectHit")
+disabled = true
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(0, -48)
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+limit_left = 0
+limit_top = -240
+limit_right = 2560
+limit_bottom = 720

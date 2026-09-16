@@ -1,0 +1,33 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy.gd" id="1_enemy"]
+[ext_resource type="Script" path="res://scripts/character_model.gd" id="2_model"]
+
+[sub_resource type="RectangleShape2D" id="RectBody"]
+size = Vector2(22, 40)
+
+[sub_resource type="RectangleShape2D" id="RectHit"]
+size = Vector2(36, 26)
+
+[node name="Enemy" type="CharacterBody2D"]
+collision_layer = 4
+collision_mask = 1
+script = ExtResource("1_enemy")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, -20)
+shape = SubResource("RectBody")
+
+[node name="Model" type="Node2D" parent="."]
+script = ExtResource("2_model")
+kind = "foe"
+
+[node name="Hitbox" type="Area2D" parent="."]
+position = Vector2(30, -22)
+collision_layer = 0
+collision_mask = 2
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox"]
+shape = SubResource("RectHit")
+disabled = true
